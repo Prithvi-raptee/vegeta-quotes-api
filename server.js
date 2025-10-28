@@ -1,20 +1,11 @@
 /*
- * Daily Vegeta Quote API
+ * Daily Vegeta Quote SVG Endpoint
  *
- * This is a simple, self-contained Node.js server that serves a single
- * "quote of the day" from a static list.
- *
- * The key design constraint is "a random quote every day."
- * This is achieved not by using Math.random() on each request, but
- * by using the current date to deterministically pick a quote.
- * This ensures every user gets the same quote for a full 24-hour period.
+ * This runs the same logic as index.js, but instead of JSON,
+ * it renders the quote as a dynamic SVG image.
  */
 
-const http = require('http');
-
-// 1. The "Database" of Quotes
-// In a real system, this might be in a file or database.
-// For this self-contained example, it's a const array.
+// 1. The "Database" of Quotes (Must be kept in sync with index.js)
 const VEGETA_QUOTES = [
     "It's over 9000!",
     "Pathetic.",
@@ -35,11 +26,7 @@ const VEGETA_QUOTES = [
     "Kakarot, you may be the first, but I will be the strongest."
 ];
 
-/**
- * Helper function to calculate the day of the year (1-366).
- * @param {Date} date - The date object to use.
- * @returns {number} The day of the year.
- */
+// 2. The Deterministic Logic (Copied from index.js)
 function getDayOfYear(date) {
     const start = new Date(date.getFullYear(), 0, 0);
     const diff = (date - start) + ((start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000);
@@ -47,57 +34,95 @@ function getDayOfYear(date) {
     return Math.floor(diff / oneDay);
 }
 
-/**
- * Gets the deterministic quote for the given date.
- * @returns {string} The quote of the day.
- */
 function getQuoteOfTheDay() {
     const today = new Date();
-    const dayIndex = getDayOfYear(today);
+    // We adjust for IST (UTC+5:30) to make the "day" change relative to your likely timezone.
+    // This moves the day change to midnight IST instead of midnight UTC.
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(today.getTime() + istOffset);
+
+    const dayIndex = getDayOfYear(istDate);
     const numQuotes = VEGETA_QUOTES.length;
-
-    // The core logic: Use the day of the year, modulo the number of quotes,
-    // to get a consistent index for the entire day.
     const quoteIndex = dayIndex % numQuotes;
-
     return VEGETA_QUOTES[quoteIndex];
 }
 
-// 2. The HTTP Server
-const server = http.createServer((req, res) => {
-    // We only care about GET requests to the root.
-    // In a real API, you'd check req.url and req.method.
-    if (req.method === 'GET') {
-        const quote = getQuoteOfTheDay();
+/**
+ * Wraps text to a given width.
+ * @param {string} text - The text to wrap.
+ * @param {number} maxWidth - The max width (in chars, approx) per line.
+ * @returns {string[]} An array of strings, one for each line.
+ */
+function wrapText(text, maxWidth = 55) {
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
 
-        // Prepare the JSON response
-        const responsePayload = {
-            quote: quote,
-            character: "Vegeta",
-            timestamp: new Date().toISOString()
-        };
+    words.forEach(word => {
+        if ((currentLine + word).length > maxWidth) {
+            lines.push(currentLine.trim());
+            currentLine = word + ' ';
+        } else {
+            currentLine += word + ' ';
+        }
+    });
+    lines.push(currentLine.trim()); // Add the last line
+    return lines;
+}
+
+// 3. The Vercel Serverless Handler
+module.exports = (req, res) => {
+    try {
+        const quote = getQuoteOfTheDay();
+        const quoteLines = wrapText(quote);
+
+        // Dynamically build <text> elements for each line
+        let lineY = 45;
+        const lineSpacing = 22;
+        const tspanElements = quoteLines.map((line, index) => {
+            const y = lineY + (index * lineSpacing);
+            return `<tspan x="20" y="${y}">${line}</tspan>`;
+        }).join('');
+
+        // Dynamically calculate card height
+        const cardHeight = 80 + (quoteLines.length - 1) * lineSpacing + 20; // Base + lines + padding
+
+        // 4. The SVG Template
+        const svg = `
+            <svg width="450" height="${cardHeight}" viewBox="0 0 450 ${cardHeight}" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <style>
+                    .quote {
+                        font: 600 16px 'Segoe UI', Ubuntu, "Helvetica Neue", Sans-Serif;
+                        fill: #9f9f9f; /* Lighter text for quote */
+                        font-style: italic;
+                    }
+                    .author {
+                        font: 700 14px 'Segoe UI', Ubuntu, "Helvetica Neue", Sans-Serif;
+                        fill: #7f7f7f; /* Darker text for author */
+                        text-anchor: end;
+                    }
+                </style>
+                
+                <rect width="100%" height="100%" rx="8" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+                
+                <text class="quote">
+                    ${tspanElements}
+                </text>
+                
+                <text class="author" x="430" y="${cardHeight - 25}">
+                    ~ Vegeta
+                </text>
+            </svg>
+        `;
 
         // Set headers
-        // We include CORS headers (Access-Control-Allow-Origin: *)
-        // to allow any webpage to call this API.
-        res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-        });
-
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+        
         // Send the response
-        res.end(JSON.stringify(responsePayload));
-    } else {
-        // Handle other methods (POST, PUT, etc.) or invalid routes
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: "Not Found" }));
+        res.status(200).send(svg);
+
+    } catch (error) {
+        res.status(500).send("Error generating quote SVG");
     }
-});
-
-// 3. Start the Server
-const PORT = 3000;
-server.listen(PORT, () => {
-    console.log(`[Vegeta API]: Running on http://localhost:${PORT}`);
-    console.log(`[Vegeta API]: Serving today's quote: "${getQuoteOfTheDay()}"`);
-});
-
+};
