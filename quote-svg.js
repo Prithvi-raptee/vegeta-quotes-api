@@ -1,11 +1,9 @@
 /*
  * Daily Vegeta Quote SVG Endpoint
- *
- * This runs the same logic as index.js, but instead of JSON,
- * it renders the quote as a dynamic SVG image.
+ * Located at /vegeta-quotes-api/quote-svg.js
  */
 
-// 1. The "Database" of Quotes (Must be kept in sync with index.js)
+// 1. The "Database" of Quotes (Must be kept in sync with json.js)
 const VEGETA_QUOTES = [
     "It's over 9000!",
     "Pathetic.",
@@ -26,7 +24,7 @@ const VEGETA_QUOTES = [
     "Kakarot, you may be the first, but I will be the strongest."
 ];
 
-// 2. The Deterministic Logic (Copied from index.js)
+// 2. The Deterministic Logic
 function getDayOfYear(date) {
     const start = new Date(date.getFullYear(), 0, 0);
     const diff = (date - start) + ((start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000);
@@ -37,7 +35,6 @@ function getDayOfYear(date) {
 function getQuoteOfTheDay() {
     const today = new Date();
     // We adjust for IST (UTC+5:30) to make the "day" change relative to your likely timezone.
-    // This moves the day change to midnight IST instead of midnight UTC.
     const istOffset = 5.5 * 60 * 60 * 1000;
     const istDate = new Date(today.getTime() + istOffset);
 
