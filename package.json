@@ -1,0 +1,8 @@
+{
+  "name": "vegeta-quote-api",
+  "version": "1.0.0",
+  "description": "Daily Vegeta quotes, served as JSON and SVG.",
+  "author": "Prithvi M Potti",
+  "license": "ISC"
+}
+
